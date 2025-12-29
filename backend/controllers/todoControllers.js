@@ -31,16 +31,27 @@ exports.addTodo = async (req, res) => {
 // Memperbarui status tugas
 exports.updateTodo = async (req, res) => {
     try {
-        const task = await ToDo.findById(req.params.id);
-        
+        const task = await Todo.findById(req.params.id);
         if (!task) {
             return res.status(404).json({ msg: 'Tugas tidak ditemukan' });
         }
 
-        const updatedTodo = await ToDo.findByIdAndUpdate(
+        let updateData = {};
+
+        // LOGIKA BARU: Cek apakah ada data yang dikirim di body?
+        if (Object.keys(req.body).length > 0) {
+            // JIKA ADA DATA: Berarti ini mode EDIT KONTEN
+            // Ambil data dari req.body (text, description, dll)
+            updateData = req.body;
+        } else {
+            // JIKA KOSONG: Berarti ini mode TOGGLE SELESAI (seperti tombol ceklis)
+            updateData = { completed: !task.completed };
+        }
+
+        const updatedTodo = await Todo.findByIdAndUpdate(
             req.params.id,
-            { completed: !task.completed }, // Ambil status dari variabel 'task'
-            { new: true } 
+            updateData, 
+            { new: true, runValidators: true }
         );
         
         res.status(200).json(updatedTodo);

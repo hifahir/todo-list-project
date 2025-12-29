@@ -3,99 +3,139 @@ import axios from "axios";
 import "./App.css";
 import Sidebar from "./sidebar";
 
-const API_URL = "http://localhost:5000/api/todos";
+// Pastikan URL ini sesuai dengan backend Anda (Localhost atau Render)
+const API_URL = "http://localhost:5000/api/todos"; 
 
 function App() {
+  // --- STATE ---
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [newTodoText, setNewTodoText] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState('all');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  
+  // State untuk Mode Edit
+  const [editId, setEditId] = useState(null);
+
+  // State untuk Data Form (Gabungan)
   const [formData, setFormData] = useState({
     text: "",
     description: "",
     deadline: "",
     priority: "Medium",
-    tags: "",
+    tags: ""
   });
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  // --- HANDLER FUNCTIONS ---
 
-  //Function untuk READ (Mengambil Daftar Tugas)
+  // 1. Mengambil data saat aplikasi dimuat
   const fetchTodos = async () => {
     try {
       const response = await axios.get(API_URL);
       setTodos(response.data);
       setLoading(false);
     } catch (error) {
-      console.error("Gagal mengambil tugas:", error);
+      console.error("Gagal ambil data:", error);
       setLoading(false);
     }
   };
 
-  // Function untuk POST (Menambahkan Tugas Baru)
-  const addTodo = async () => {
-    if (!formData.text.trim()) return;
+  useEffect(() => { fetchTodos(); }, []);
+
+  // 2. Mengurus perubahan input form
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  // 3. FUNGSI UTAMA: SIMPAN & UPDATE (Pengganti addTodo)
+  const handleSubmit = async () => {
+    // Validasi: Judul tidak boleh kosong
+    if (!formData.text.trim()) {
+      alert("Judul tugas wajib diisi!");
+      return;
+    }
 
     try {
-      // Siapkan data untuk dikirim
+      // Format tags dari string "a, b" menjadi array ["a", "b"]
       const payload = {
         ...formData,
-        // Ubah string tag "Kampus, Belajar" menjadi array ["Kampus", "Belajar"]
-        tags: formData.tags
-          ? formData.tags.split(",").map((tag) => tag.trim())
-          : [],
+        tags: typeof formData.tags === 'string' && formData.tags 
+              ? formData.tags.split(',').map(tag => tag.trim()) 
+              : formData.tags
       };
 
-      const response = await axios.post(API_URL, payload);
-      setTodos([response.data, ...todos]);
+      if (editId) {
+        // --- MODE UPDATE ---
+        const response = await axios.patch(`${API_URL}/${editId}`, payload);
+        
+        // Update state lokal
+        setTodos(todos.map(todo => (todo._id === editId ? response.data : todo)));
+        setEditId(null); // Keluar mode edit
+      } else {
+        // --- MODE CREATE (TAMBAH BARU) ---
+        const response = await axios.post(API_URL, payload);
+        setTodos([response.data, ...todos]);
+      }
+      
+      // Reset Form jadi kosong
+      setFormData({ text: "", description: "", deadline: "", priority: "Medium", tags: "" });
 
-      // Reset Form
-      setFormData({
-        text: "",
-        description: "",
-        deadline: "",
-        priority: "Medium",
-        tags: "",
-      });
     } catch (error) {
-      console.error("Gagal menambahkan tugas:", error);
+      console.error("Gagal menyimpan tugas:", error);
+      alert("Terjadi kesalahan saat menyimpan.");
     }
   };
 
-  // Function untuk mengubah status completed
-  const toggleComplete = async (id) => {
-    try {
-      const response = await axios.put(`${API_URL}/${id}`);
-
-      setTodos(todos.map((todo) => (todo._id === id ? response.data : todo)));
-    } catch (error) {
-      console.error("Gagal memperbarui tugas:", error);
+  // 4. Masuk ke Mode Edit (Isi form dengan data tugas)
+  const handleEdit = (todo) => {
+    setEditId(todo._id);
+    
+    // Format tanggal agar bisa masuk ke input HTML
+    let formattedDate = "";
+    if (todo.deadline) {
+       const date = new Date(todo.deadline);
+       // Trik mengatasi zona waktu
+       const offset = date.getTimezoneOffset() * 60000;
+       formattedDate = new Date(date.getTime() - offset).toISOString().slice(0, 16);
     }
+
+    setFormData({
+      text: todo.text,
+      description: todo.description || "",
+      deadline: formattedDate,
+      priority: todo.priority || "Medium",
+      tags: todo.tags ? todo.tags.join(', ') : ""
+    });
+    
+    // Scroll ke atas
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Function untuk DELETE (Menghapus Tugas)
+  // 5. Batal Edit
+  const handleCancelEdit = () => {
+    setEditId(null);
+    setFormData({ text: "", description: "", deadline: "", priority: "Medium", tags: "" });
+  };
+
+  // 6. Delete Tugas
   const deleteTodo = async (id) => {
-    try {
-      await axios.delete(`${API_URL}/${id}`);
-      setTodos(todos.filter((todo) => todo._id !== id));
-    } catch (error) {
-      console.error("Gagal menghapus tugas:", error);
-    }
+      if(!window.confirm("Yakin hapus tugas ini?")) return;
+
+      try {
+        await axios.delete(`${API_URL}/${id}`);
+        setTodos(todos.filter((todo) => todo._id !== id));
+      } catch (error) { console.error(error); }
   };
 
-  useEffect(() => {
-    fetchTodos();
-  }, []);
+  // 7. Toggle Selesai
+  const toggleComplete = async (id) => {
+      try {
+        // Kirim body kosong {} karena backend menangani toggle jika body kosong
+        const response = await axios.patch(`${API_URL}/${id}`, {}); 
+        setTodos(todos.map((todo) => (todo._id === id ? response.data : todo)));
+      } catch (error) { console.error(error); }
+  };
 
-  const filteredTodos = todos.filter((todo) => {
-    if (filter === "active") return !todo.completed;
-    if (filter === "completed") return todo.completed;
-    return true;
-  });
-
+  // --- HELPER FUNCTIONS ---
   const isOverdue = (deadline, completed) => {
     if (!deadline || completed) return false;
     return new Date(deadline) < new Date();
@@ -103,20 +143,19 @@ function App() {
 
   const formatDate = (dateString) => {
     if (!dateString) return "";
-    const options = {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    };
-    return new Date(dateString).toLocaleDateString("id-ID", options);
+    const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return new Date(dateString).toLocaleDateString('id-ID', options);
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  const filteredTodos = todos.filter(todo => {
+    if (filter === 'active') return !todo.completed;
+    if (filter === 'completed') return todo.completed;
+    return true;
+  });
 
+  if (loading) return <div className="loading">Loading...</div>;
+
+  // --- TAMPILAN (JSX) ---
   return (
     <div className="app-container">
       <Sidebar
@@ -140,8 +179,15 @@ function App() {
         </header>
 
         <main>
-          {/* --- FORM INPUT YANG LEBIH LENGKAP --- */}
-          <div className="form-container">
+          {/* --- FORM INPUT --- */}
+          <div className="form-container" style={editId ? {border: '2px solid #ffa502'} : {}}>
+            
+            {editId && (
+              <div style={{marginBottom: '10px', color: '#ffa502', fontWeight: 'bold'}}>
+                ✏️ Sedang Mengedit Tugas
+              </div>
+            )}
+
             <div className="form-row">
               <input
                 name="text"
@@ -174,7 +220,7 @@ function App() {
             <div className="form-row">
               <input
                 name="deadline"
-                type="datetime-local" // Input Tanggal & Jam HTML5
+                type="datetime-local"
                 value={formData.deadline}
                 onChange={handleChange}
                 className="input-date"
@@ -187,18 +233,37 @@ function App() {
                 onChange={handleChange}
                 className="input-tags"
               />
-              <button onClick={addTodo} className="btn-add">
-                Simpan Tugas
-              </button>
+
+              {/* TOMBOL AKSI */}
+              {editId ? (
+                 <div style={{display: 'flex', gap: '5px'}}>
+                   <button 
+                     onClick={handleSubmit} 
+                     className="btn-add" 
+                     style={{backgroundColor: '#ffa502'}}
+                   >
+                     Update
+                   </button>
+                   <button 
+                     onClick={handleCancelEdit} 
+                     className="btn-add" 
+                     style={{backgroundColor: '#747d8c'}}
+                   >
+                     Batal
+                   </button>
+                 </div>
+              ) : (
+                 <button onClick={handleSubmit} className="btn-add">
+                   Simpan Tugas
+                 </button>
+              )}
             </div>
           </div>
 
-          {/* --- DAFTAR TUGAS DENGAN DETAIL --- */}
+          {/* --- LIST TUGAS --- */}
           <div className="todo-list">
             {filteredTodos.map((todo) => {
               const overdue = isOverdue(todo.deadline, todo.completed);
-
-              // PERBAIKAN: Berikan nilai default jika data kosong (untuk support data lama)
               const priority = todo.priority ? todo.priority : "Medium";
               const tags = todo.tags ? todo.tags : [];
 
@@ -209,7 +274,6 @@ function App() {
                     todo.completed ? "completed" : ""
                   }`}
                 >
-                  {/* Bagian Header Card */}
                   <div className="card-header">
                     <div className="badges">
                       <span className={`badge-priority ${priority}`}>
@@ -226,7 +290,6 @@ function App() {
                     )}
                   </div>
 
-                  {/* Bagian Isi Card */}
                   <div className="card-body">
                     <h3 onClick={() => toggleComplete(todo._id)}>
                       {todo.text}
@@ -235,20 +298,23 @@ function App() {
                       <p className="desc-text">{todo.description}</p>
                     )}
 
-                    {/* Tags (Gunakan variabel aman 'tags') */}
                     {tags.length > 0 && (
                       <div className="tags-container">
                         {tags.map((tag, idx) => (
-                          <span key={idx} className="tag">
-                            #{tag}
-                          </span>
+                          <span key={idx} className="tag">#{tag}</span>
                         ))}
                       </div>
                     )}
                   </div>
 
-                  {/* Bagian Footer Card */}
                   <div className="card-footer">
+                    <button 
+                      onClick={() => handleEdit(todo)} 
+                      className="btn-edit"
+                    >
+                      ✏️ Edit
+                    </button>
+
                     <button
                       onClick={() => deleteTodo(todo._id)}
                       className="btn-delete"

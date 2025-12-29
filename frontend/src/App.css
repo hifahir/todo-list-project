@@ -286,6 +286,23 @@ body {
     font-size: 17px;
 }
 
+/* Tambahkan ini di bagian Card Footer */
+
+.btn-edit {
+  background: transparent;
+  color: #ffa502; /* Warna Oranye */
+  border: 1px solid #ffa502;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: auto; /* Agar tombol Edit di kiri, tombol hapus/selesai di kanan */
+}
+
+.btn-edit:hover {
+  background: #ffa502;
+  color: white;
+}
+
 /* Styling untuk Tugas yang Selesai */
 .todo-item.completed {
     background-color: #e0f7fa;
